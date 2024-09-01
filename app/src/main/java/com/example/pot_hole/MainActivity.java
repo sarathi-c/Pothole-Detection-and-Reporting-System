@@ -36,7 +36,6 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private WebView webView;
     private LocationManager locationManager;
     private Location currentLocation;
-    private Uri currentImageUri;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -98,12 +97,10 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            currentImageUri = Uri.fromFile(imageFile);
 
             if (currentLocation != null) {
                 double lat = currentLocation.getLatitude();
                 double lon = currentLocation.getLongitude();
-
                 webView.evaluateJavascript("window.postMessage({type: 'location', lat: " + lat + ", lon: " + lon + "}, '*');", null);
                 Toast.makeText(this, "Pothole added at: " + lat + ", " + lon, Toast.LENGTH_LONG).show();
             } else {

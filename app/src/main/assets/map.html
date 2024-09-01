@@ -5,19 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
-        #map { height: 100vh; }
-        .popup-image { max-width: 200px; }
-        .custom-icon div { border: 1px solid black; }
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+        #map {
+            height: 100vh;
+        }
+        .custom-icon div {
+            border: 1px solid black;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        #pothole-count {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000; /* Ensure it stays above the map */
+            font-size: 16px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
 <div id="map"></div>
-<div id="pothole-count" style="position:absolute; top:10px; left:10px; background:white; padding:5px;">Potholes Nearby: 0</div>
+<div id="pothole-count">Potholes Nearby: 0</div>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
     var map = L.map('map').setView([13.0827, 80.2707], 12);
-
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
@@ -27,14 +46,13 @@
     function addPothole(lat, lon) {
         var pothole = [lat, lon];
         potholeLocations.push(pothole);
-        var marker = L.marker(pothole, {
+        L.marker(pothole, {
             icon: L.divIcon({
                 className: 'custom-icon',
                 html: '<div style="background-color:red; width:10px; height:10px; border-radius:50%;"></div>'
             })
-        }).addTo(map);
-        marker.bindPopup("Pothole at: " + lat.toFixed(5) + ", " + lon.toFixed(5));
-        marker.bringToFront();  // Ensure pothole marker is above other markers
+        }).addTo(map).bindPopup("Pothole at: " + lat.toFixed(5) + ", " + lon.toFixed(5));
+        updatePotholeCount(map.getCenter().lat, map.getCenter().lng);
     }
 
     function updatePotholeCount(lat, lon) {
@@ -43,8 +61,7 @@
         var userLocation = L.latLng(lat, lon);
         potholeLocations.forEach(function(pothole) {
             var potholeLatLng = L.latLng(pothole);
-            var distance = userLocation.distanceTo(potholeLatLng);
-            if (distance <= radius) {
+            if (userLocation.distanceTo(potholeLatLng) <= radius) {
                 count++;
             }
         });
@@ -53,7 +70,6 @@
 
     window.addEventListener('message', function(event) {
         var data = event.data;
-        console.log("Received data:", data);
         if (data.type === 'location') {
             addPothole(data.lat, data.lon);
         } else if (data.type === 'currentLocation') {
@@ -73,3 +89,4 @@
 </script>
 </body>
 </html>
+
