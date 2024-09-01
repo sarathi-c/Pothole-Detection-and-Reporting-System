@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Leaflet Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map { height: 100vh; }
+        .popup-image { max-width: 200px; }
+        .custom-icon div { border: 1px solid black; }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+    var map = L.map('map').setView([13.0827, 80.2707], 13); // Default to Chennai coordinates
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    var markers = [];
+
+    function addMarker(lat, lon, imageUrl, color = 'red') {
+        var marker = L.marker([lat, lon], {
+            icon: L.divIcon({ className: 'custom-icon', html: `<div style="background-color:${color}; width:10px; height:10px; border-radius:50%;"></div>` })
+        }).addTo(map);
+
+        var popupContent = `<img src="${imageUrl}" class="popup-image" />`;
+        marker.bindPopup(popupContent);
+
+        markers.push(marker);
+    }
+
+    function setCurrentLocation(lat, lon) {
+        if (markers.currentLocation) {
+            map.removeLayer(markers.currentLocation);
+        }
+        markers.currentLocation = L.marker([lat, lon], {
+            icon: L.divIcon({ className: 'custom-icon', html: '<div style="background-color:blue; width:15px; height:15px; border-radius:50%;"></div>' })
+        }).addTo(map);
+        map.setView([lat, lon], 13);
+    }
+
+    window.addEventListener('message', function(event) {
+        var data = event.data;
+
+        if (data.type === 'location') {
+            addMarker(data.lat, data.lon, data.imageUrl);
+        } else if (data.type === 'currentLocation') {
+            setCurrentLocation(data.lat, data.lon);
+        }
+    });
+</script>
+</body>
+</html>
