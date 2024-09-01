@@ -8,48 +8,66 @@
         #map { height: 100vh; }
         .popup-image { max-width: 200px; }
         .custom-icon div { border: 1px solid black; }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
     </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="pothole-count" style="position:absolute; top:10px; left:10px; background:white; padding:5px;">Potholes Nearby: 0</div>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-    var map = L.map('map').setView([13.0827, 80.2707], 13); // Default to Chennai coordinates
+    var map = L.map('map').setView([13.0827, 80.2707], 12);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    var markers = [];
+    var potholeLocations = [];
 
-    function addMarker(lat, lon, imageUrl, color = 'red') {
-        var marker = L.marker([lat, lon], {
-            icon: L.divIcon({ className: 'custom-icon', html: `<div style="background-color:${color}; width:10px; height:10px; border-radius:50%;"></div>` })
+    function addPothole(lat, lon) {
+        var pothole = [lat, lon];
+        potholeLocations.push(pothole);
+        var marker = L.marker(pothole, {
+            icon: L.divIcon({
+                className: 'custom-icon',
+                html: '<div style="background-color:red; width:10px; height:10px; border-radius:50%;"></div>'
+            })
         }).addTo(map);
-
-        var popupContent = `<img src="${imageUrl}" class="popup-image" />`;
-        marker.bindPopup(popupContent);
-
-        markers.push(marker);
+        marker.bindPopup("Pothole at: " + lat.toFixed(5) + ", " + lon.toFixed(5));
+        marker.bringToFront();  // Ensure pothole marker is above other markers
     }
 
-    function setCurrentLocation(lat, lon) {
-        if (markers.currentLocation) {
-            map.removeLayer(markers.currentLocation);
-        }
-        markers.currentLocation = L.marker([lat, lon], {
-            icon: L.divIcon({ className: 'custom-icon', html: '<div style="background-color:blue; width:15px; height:15px; border-radius:50%;"></div>' })
-        }).addTo(map);
-        map.setView([lat, lon], 13);
+    function updatePotholeCount(lat, lon) {
+        var radius = 5000; // 5 km radius
+        var count = 0;
+        var userLocation = L.latLng(lat, lon);
+        potholeLocations.forEach(function(pothole) {
+            var potholeLatLng = L.latLng(pothole);
+            var distance = userLocation.distanceTo(potholeLatLng);
+            if (distance <= radius) {
+                count++;
+            }
+        });
+        document.getElementById('pothole-count').textContent = "Potholes Nearby: " + count;
     }
 
     window.addEventListener('message', function(event) {
         var data = event.data;
-
+        console.log("Received data:", data);
         if (data.type === 'location') {
-            addMarker(data.lat, data.lon, data.imageUrl);
+            addPothole(data.lat, data.lon);
         } else if (data.type === 'currentLocation') {
-            setCurrentLocation(data.lat, data.lon);
+            updatePotholeCount(data.lat, data.lon);
+            if (map.currentLocationMarker) {
+                map.removeLayer(map.currentLocationMarker);
+            }
+            map.currentLocationMarker = L.marker([data.lat, data.lon], {
+                icon: L.divIcon({
+                    className: 'custom-icon',
+                    html: '<div style="background-color:blue; width:15px; height:15px; border-radius:50%;"></div>'
+                })
+            }).addTo(map).bindPopup('Your Current Location');
+            map.setView([data.lat, data.lon], 15);
         }
     });
 </script>

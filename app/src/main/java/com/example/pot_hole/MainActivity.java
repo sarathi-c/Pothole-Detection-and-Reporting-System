@@ -4,13 +4,16 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.Toast;
 
@@ -18,10 +21,6 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-
-import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -46,32 +45,24 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         imageView = findViewById(R.id.image_view);
         webView = findViewById(R.id.webview);
-        Button takePictureButton = findViewById(R.id.take_picture_button);
+        ImageButton takePictureButton = findViewById(R.id.take_picture_button);
 
-        // Initialize WebView
         webView.setWebViewClient(new WebViewClient());
         WebSettings webSettings = webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
+        webSettings.setDomStorageEnabled(true);
         webView.loadUrl("file:///android_asset/map.html");
 
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
 
-        // Request location permissions
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                    REQUEST_LOCATION_PERMISSION);
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_LOCATION_PERMISSION);
         } else {
             startLocationUpdates();
         }
 
-        // Request camera permissions
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.CAMERA},
-                    REQUEST_CAMERA_PERMISSION);
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
         }
 
         takePictureButton.setOnClickListener(v -> dispatchTakePictureIntent());
@@ -79,7 +70,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     private void startLocationUpdates() {
         try {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 5, this);
         } catch (SecurityException e) {
             e.printStackTrace();
         }
@@ -101,7 +92,6 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             Bitmap imageBitmap = (Bitmap) extras.get("data");
             imageView.setImageBitmap(imageBitmap);
 
-            // Save image to storage and get the URI
             File imageFile = new File(getExternalFilesDir(null), "photo.jpg");
             try (FileOutputStream out = new FileOutputStream(imageFile)) {
                 imageBitmap.compress(Bitmap.CompressFormat.JPEG, 100, out);
@@ -114,12 +104,8 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 double lat = currentLocation.getLatitude();
                 double lon = currentLocation.getLongitude();
 
-                // Send location and image URL data to WebView
-                String imageUrl = currentImageUri.toString();
-                webView.evaluateJavascript("window.postMessage({type: 'location', lat: " + lat + ", lon: " + lon + ", imageUrl: '" + imageUrl + "'}, '*');", null);
-                webView.evaluateJavascript("window.postMessage({type: 'currentLocation', lat: " + lat + ", lon: " + lon + "}, '*');", null);
-
-                Toast.makeText(this, "Location: " + lat + ", " + lon, Toast.LENGTH_LONG).show();
+                webView.evaluateJavascript("window.postMessage({type: 'location', lat: " + lat + ", lon: " + lon + "}, '*');", null);
+                Toast.makeText(this, "Pothole added at: " + lat + ", " + lon, Toast.LENGTH_LONG).show();
             } else {
                 Toast.makeText(this, "Location not available", Toast.LENGTH_LONG).show();
             }
@@ -127,8 +113,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_CAMERA_PERMISSION) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
