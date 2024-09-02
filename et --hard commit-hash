@@ -1,0 +1,23 @@
+[33mcommit a2feb15208a13eee1e4fda9bfcdbdb677543ff28[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: Pradeep <cpradeepbharathi@gmail.com>
+Date:   Sun Sep 1 18:38:48 2024 +0530
+
+    working basic app without model
+
+[33mcommit 1cdc774f0670f19878cb99e573f73139ec996d69[m
+Author: Pradeep <cpradeepbharathi@gmail.com>
+Date:   Sun Sep 1 17:04:30 2024 +0530
+
+    camera,location with distance
+
+[33mcommit 07dd1e52f2834006b44ff375e8f9101f165f183a[m
+Author: Pradeep <cpradeepbharathi@gmail.com>
+Date:   Sun Sep 1 13:35:03 2024 +0530
+
+    location and camera working
+
+[33mcommit cfbc861d74a86171f8ce0c2188257da488c85bc3[m
+Author: Pradeep <cpradeepbharathi@gmail.com>
+Date:   Sun Sep 1 13:33:44 2024 +0530
+
+    Initial commit
