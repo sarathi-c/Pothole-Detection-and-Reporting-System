@@ -34,6 +34,7 @@
         android:scaleType="centerCrop"
         android:visibility="gone" />
 
+    <!-- Camera Button in the Center Bottom -->
     <ImageButton
         android:id="@+id/take_picture_button"
         android:layout_width="80dp"
@@ -42,6 +43,7 @@
         android:src="@drawable/camera"
         android:scaleType="fitCenter"
         android:padding="10dp"
+        android:elevation="6dp"
         android:layout_alignParentBottom="true"
         android:layout_centerHorizontal="true"
         android:layout_marginBottom="25dp"
@@ -58,5 +60,53 @@
         android:textColor="#FFFFFF"
         android:textSize="18sp"
         android:textStyle="bold" />
+
+    <!-- Refresh Button as Floating Action Button style -->
+    <ImageButton
+        android:id="@+id/refresh_button"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="80dp"
+        android:layout_marginEnd="20dp"
+        android:layout_alignParentEnd="true"
+        android:src="@drawable/refresh"
+        android:scaleType="centerInside"
+        android:background="@drawable/circular_button"
+        android:padding="10dp"
+        android:elevation="6dp"
+        android:backgroundTint="#FFFFFF" />
+
+
+
+    <!-- Pothole List Button, same size and style as the Location Button -->
+    <ImageButton
+        android:id="@+id/pothole_list_button"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="80dp"
+        android:layout_marginStart="20dp"
+        android:src="@drawable/list"
+        android:background="@drawable/circular_button"
+        android:padding="7dp"
+        android:elevation="6dp"
+        android:scaleType="fitCenter"
+        android:backgroundTint="#FFFFFF" />
+
+    <!-- Settings Button in the Top Right Corner -->
+    <ImageButton
+        android:id="@+id/settings_button"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:layout_alignParentTop="true"
+        android:layout_marginTop="20dp"
+        android:layout_marginEnd="20dp"
+        android:layout_alignParentEnd="true"
+        android:src="@drawable/settings"
+        android:scaleType="centerInside"
+        android:background="@drawable/circular_button"
+        android:padding="10dp"
+        android:backgroundTint="#FFFFFF" />
 
 </RelativeLayout>

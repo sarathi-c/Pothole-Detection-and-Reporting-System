@@ -7,6 +7,7 @@
     <style>
         #map {
             height: 100vh;
+            width: 100%;
         }
         .custom-icon div {
             border: 1px solid black;
@@ -36,13 +37,23 @@
 <div id="pothole-count">Potholes Nearby: 0</div>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-    var map = L.map('map').setView([13.0827, 80.2707], 12);
+    // Initialize the map and set its view
+    var map = L.map('map').setView([20.5937, 78.9629], 5);
+
+    // Add a tile layer to the map
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
     var potholeLocations = [];
+    var userMovedMap = false;
 
+    // Track whether the user has moved the map manually
+    map.on('movestart', function() {
+        userMovedMap = true;
+    });
+
+    // Add a pothole marker to the map
     function addPothole(lat, lon) {
         var pothole = [lat, lon];
         potholeLocations.push(pothole);
@@ -55,6 +66,7 @@
         updatePotholeCount(map.getCenter().lat, map.getCenter().lng);
     }
 
+    // Update the count of potholes within a 5km radius of the given coordinates
     function updatePotholeCount(lat, lon) {
         var radius = 5000; // 5 km radius
         var count = 0;
@@ -68,6 +80,25 @@
         document.getElementById('pothole-count').textContent = "Potholes Nearby: " + count;
     }
 
+    // Manually add predefined potholes
+    function addPredefinedPotholes() {
+        var predefinedPotholes = [
+            {lat: 19.0760, lon: 72.8777}, // Mumbai
+            {lat: 13.0827, lon: 80.2707}, // Chennai
+            {lat: 28.6139, lon: 77.2090}, // Delhi
+            {lat: 22.5726, lon: 88.3639}, // Kolkata
+            {lat: 17.3850, lon: 78.4867}  // Hyderabad
+        ];
+
+        predefinedPotholes.forEach(function(pothole) {
+            addPothole(pothole.lat, pothole.lon);
+        });
+    }
+
+    // Add predefined potholes
+    addPredefinedPotholes();
+
+    // Handle messages to update potholes and current location
     window.addEventListener('message', function(event) {
         var data = event.data;
         if (data.type === 'location') {
@@ -83,10 +114,12 @@
                     html: '<div style="background-color:blue; width:15px; height:15px; border-radius:50%;"></div>'
                 })
             }).addTo(map).bindPopup('Your Current Location');
-            map.setView([data.lat, data.lon], 15);
+            // Only set the view if the user hasn't moved the map manually
+            if (!userMovedMap) {
+                map.setView([data.lat, data.lon], 15);
+            }
         }
     });
 </script>
 </body>
 </html>
-

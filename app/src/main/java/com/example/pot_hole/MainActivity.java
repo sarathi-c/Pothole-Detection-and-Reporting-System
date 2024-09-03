@@ -1,7 +1,10 @@
 package com.example.pot_hole;
 
 import android.Manifest;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.location.Location;
@@ -9,12 +12,18 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.telephony.SmsManager;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.ListView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResult;
@@ -32,6 +41,9 @@ import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 import com.example.pot_hole.ml.Model;
 
@@ -39,14 +51,20 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     private static final int REQUEST_CAMERA_PERMISSION = 1;
     private static final int REQUEST_LOCATION_PERMISSION = 2;
+    private static final int REQUEST_SEND_SMS = 3;
     private static final String TAG = "MainActivity";
+    private static final String PREFS_NAME = "PotholePrefs";
+    private static final String POTHOLE_KEY = "potholes";
 
     private ImageView imageView;
     private WebView webView;
     private LocationManager locationManager;
     private Location currentLocation;
+    private ArrayList<String> potholeList = new ArrayList<>();
 
     private Model model;
+    private boolean toastMessagesEnabled = true; // Variable to control Toast messages
+    private boolean sendSmsEnabled = true; // Variable to control sending SMS
 
     private final ActivityResultLauncher<Intent> takePictureLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), new ActivityResultCallback<ActivityResult>() {
@@ -69,8 +87,23 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         imageView = findViewById(R.id.image_view);
         webView = findViewById(R.id.webview);
         ImageButton takePictureButton = findViewById(R.id.take_picture_button);
+        ImageButton refreshButton = findViewById(R.id.refresh_button);
+        ImageButton potholeListButton = findViewById(R.id.pothole_list_button);
+        ImageButton settingsButton = findViewById(R.id.settings_button);
 
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                // Re-send the current location to the WebView after it finishes loading
+                if (currentLocation != null) {
+                    String jsCode = "window.postMessage({type: 'currentLocation', lat: " + currentLocation.getLatitude() + ", lon: " + currentLocation.getLongitude() + "}, '*');";
+                    webView.evaluateJavascript(jsCode, null);
+                }
+                loadSavedPotholes();
+            }
+        });
+
         WebSettings webSettings = webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
@@ -89,16 +122,23 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         }
 
         takePictureButton.setOnClickListener(v -> dispatchTakePictureIntent());
+        refreshButton.setOnClickListener(v -> refreshMap());
+        potholeListButton.setOnClickListener(v -> showPotholeListDialog());
+        settingsButton.setOnClickListener(v -> showSettingsDialog());
 
         // Load TensorFlow Lite model
         try {
             model = Model.newInstance(this);
             Log.d(TAG, "Model loaded successfully");
-            Toast.makeText(this, "Model loaded successfully", Toast.LENGTH_SHORT).show();
+            if (toastMessagesEnabled) {
+                Toast.makeText(this, "Model loaded successfully", Toast.LENGTH_SHORT).show();
+            }
         } catch (IOException e) {
             e.printStackTrace();
             Log.e(TAG, "Failed to load model", e);
-            Toast.makeText(this, "Failed to load model", Toast.LENGTH_LONG).show();
+            if (toastMessagesEnabled) {
+                Toast.makeText(this, "Failed to load model", Toast.LENGTH_LONG).show();
+            }
         }
     }
 
@@ -111,7 +151,9 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     private void classifyImage(Bitmap bitmap) {
         if (model == null) {
-            Toast.makeText(this, "Model is not loaded", Toast.LENGTH_LONG).show();
+            if (toastMessagesEnabled) {
+                Toast.makeText(this, "Model is not loaded", Toast.LENGTH_LONG).show();
+            }
             Log.e(TAG, "Model is not loaded");
             return;
         }
@@ -121,7 +163,9 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             ByteBuffer byteBuffer = convertBitmapToByteBuffer(bitmap);
             inputFeature0.loadBuffer(byteBuffer);
             Log.d(TAG, "Image loaded into tensor buffer");
-            Toast.makeText(this, "Image prepared for classification", Toast.LENGTH_SHORT).show();
+            if (toastMessagesEnabled) {
+                Toast.makeText(this, "Image prepared for classification", Toast.LENGTH_SHORT).show();
+            }
 
             Model.Outputs outputs = model.process(inputFeature0);
             TensorBuffer outputFeature0 = outputs.getOutputFeature0AsTensorBuffer();
@@ -129,11 +173,15 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             float[] probabilities = outputFeature0.getFloatArray();
             if (probabilities.length != 2 || Float.isNaN(probabilities[0]) || Float.isNaN(probabilities[1])) {
                 Log.e(TAG, "Invalid output from model: NaN values detected");
-                Toast.makeText(this, "Invalid output from model (NaN values)", Toast.LENGTH_LONG).show();
+                if (toastMessagesEnabled) {
+                    Toast.makeText(this, "Invalid output from model (NaN values)", Toast.LENGTH_LONG).show();
+                }
                 return;
             }
             Log.d(TAG, "Model output probabilities: [" + probabilities[0] + ", " + probabilities[1] + "]");
-            Toast.makeText(this, "Inference completed: Pothole prob: " + probabilities[0] + ", Not Pothole prob: " + probabilities[1], Toast.LENGTH_LONG).show();
+            if (toastMessagesEnabled) {
+                Toast.makeText(this, "Inference completed: Pothole prob: " + probabilities[0] + ", Not Pothole prob: " + probabilities[1], Toast.LENGTH_LONG).show();
+            }
 
             float threshold = 0.5f;
             String resultString = probabilities[0] > threshold ? "pothole" : "not a pothole";
@@ -142,16 +190,45 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 double lat = currentLocation.getLatitude();
                 double lon = currentLocation.getLongitude();
                 webView.evaluateJavascript("window.postMessage({type: 'location', lat: " + lat + ", lon: " + lon + "}, '*');", null);
-                Toast.makeText(MainActivity.this, "Pothole detected at: " + lat + ", " + lon, Toast.LENGTH_LONG).show();
+
+                String pothole = "Pothole at: " + lat + ", " + lon;
+                if (!potholeList.contains(pothole)) {
+                    potholeList.add(pothole);
+                    savePotholes();
+                    if (sendSmsEnabled) {
+                        sendSms(lat, lon); // Send SMS automatically when a pothole is detected
+                    }
+                }
+
+                if (toastMessagesEnabled) {
+                    Toast.makeText(MainActivity.this, "Pothole detected at: " + lat + ", " + lon, Toast.LENGTH_LONG).show();
+                }
                 Log.d(TAG, "Pothole detected at: " + lat + ", " + lon);
             } else {
-                Toast.makeText(MainActivity.this, "Not a Pothole", Toast.LENGTH_LONG).show();
+                if (toastMessagesEnabled) {
+                    Toast.makeText(MainActivity.this, "Not a Pothole", Toast.LENGTH_LONG).show();
+                }
                 Log.d(TAG, "Image classified as not a pothole");
             }
         } catch (Exception e) {
             e.printStackTrace();
             Log.e(TAG, "Error during model inference", e);
-            Toast.makeText(this, "Error during model inference", Toast.LENGTH_LONG).show();
+            if (toastMessagesEnabled) {
+                Toast.makeText(this, "Error during model inference", Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    private void sendSms(double lat, double lon) {
+        String phoneNumber = "9902956437"; // Replace with the actual phone number
+        String message = "Pothole detected at coordinates:\nLatitude: " + lat + "\nLongitude: " + lon + "\n\n- Team idkWhatWe'reDoing";
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.SEND_SMS}, REQUEST_SEND_SMS);
+        } else {
+            SmsManager smsManager = SmsManager.getDefault();
+            smsManager.sendTextMessage(phoneNumber, null, message, null, null);
+            Toast.makeText(this, "SMS sent successfully!", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -165,56 +242,25 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         resizedBitmap.getPixels(intValues, 0, 224, 0, 0, 224, 224);
 
         for (int value : intValues) {
-            byteBuffer.putFloat(((value >> 16) & 0xFF) / 255.f);
-            byteBuffer.putFloat(((value >> 8) & 0xFF) / 255.f);
-            byteBuffer.putFloat((value & 0xFF) / 255.f);
+            byteBuffer.putFloat(((value >> 16) & 0xFF) / 255.0f);
+            byteBuffer.putFloat(((value >> 8) & 0xFF) / 255.0f);
+            byteBuffer.putFloat((value & 0xFF) / 255.0f);
         }
-        Log.d(TAG, "Bitmap converted to ByteBuffer with normalization");
-        Toast.makeText(this, "Image converted to ByteBuffer", Toast.LENGTH_SHORT).show();
+
         return byteBuffer;
     }
 
     private void startLocationUpdates() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_LOCATION_PERMISSION);
-            return;
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
         }
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
-        Log.d(TAG, "Location updates started");
-        Toast.makeText(this, "Location updates started", Toast.LENGTH_SHORT).show();
     }
 
     @Override
     public void onLocationChanged(@NonNull Location location) {
         currentLocation = location;
-        Log.d(TAG, "Location updated: " + location.getLatitude() + ", " + location.getLongitude());
-
-        if (webView != null && currentLocation != null) {
-            String jsCode = "window.postMessage({type: 'currentLocation', lat: " + location.getLatitude() + ", lon: " + location.getLongitude() + "}, '*');";
-            webView.evaluateJavascript(jsCode, null);
-        }
-    }
-
-    @Override
-    public void onStatusChanged(String provider, int status, Bundle extras) {
-    }
-
-    @Override
-    public void onProviderEnabled(@NonNull String provider) {
-    }
-
-    @Override
-    public void onProviderDisabled(@NonNull String provider) {
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (model != null) {
-            model.close();
-            Log.d(TAG, "Model closed");
-        }
+        String jsCode = "window.postMessage({type: 'currentLocation', lat: " + location.getLatitude() + ", lon: " + location.getLongitude() + "}, '*');";
+        webView.evaluateJavascript(jsCode, null);
     }
 
     @Override
@@ -224,14 +270,124 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 dispatchTakePictureIntent();
             } else {
-                Toast.makeText(this, "Camera permission denied", Toast.LENGTH_SHORT).show();
+                // Permission denied, show a message to the user
+                new AlertDialog.Builder(this)
+                        .setTitle("Permission Required")
+                        .setMessage("Camera permission is required to take pictures.")
+                        .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
+                        .show();
             }
         } else if (requestCode == REQUEST_LOCATION_PERMISSION) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startLocationUpdates();
             } else {
-                Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show();
+                // Permission denied, show a message to the user
+                new AlertDialog.Builder(this)
+                        .setTitle("Permission Required")
+                        .setMessage("Location permission is required to access location.")
+                        .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
+                        .show();
             }
+        } else if (requestCode == REQUEST_SEND_SMS) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission granted, you can send SMS now
+                Toast.makeText(this, "SMS permission granted. Try again.", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "SMS permission denied.", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    private void refreshMap() {
+        // Clear existing potholes from the map
+        webView.evaluateJavascript("window.clearPotholes();", null);
+
+        // Reload the map
+        webView.reload();
+
+        if (toastMessagesEnabled) {
+            Toast.makeText(this, "Map refreshed", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void showPotholeListDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Pothole List");
+
+        ListView listView = new ListView(this);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, potholeList);
+        listView.setAdapter(adapter);
+
+        builder.setView(listView);
+        builder.setPositiveButton("OK", (dialog, which) -> dialog.dismiss());
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+    }
+
+    private void showSettingsDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Settings");
+
+        // Inflate the custom layout
+        LayoutInflater inflater = getLayoutInflater();
+        View settingsView = inflater.inflate(R.layout.dialog_settings, null);
+
+        CheckBox toastMessagesCheckBox = settingsView.findViewById(R.id.toast_messages_checkbox);
+        toastMessagesCheckBox.setChecked(toastMessagesEnabled);
+
+        CheckBox sendSmsCheckBox = settingsView.findViewById(R.id.send_sms_checkbox);
+        sendSmsCheckBox.setChecked(sendSmsEnabled);
+
+        builder.setView(settingsView);
+        builder.setPositiveButton("Save", (dialog, which) -> {
+            toastMessagesEnabled = toastMessagesCheckBox.isChecked();
+            sendSmsEnabled = sendSmsCheckBox.isChecked();
+            if (toastMessagesEnabled) {
+                Toast.makeText(MainActivity.this, "Toast messages enabled", Toast.LENGTH_SHORT).show();
+            }
+            if (sendSmsEnabled) {
+                Toast.makeText(MainActivity.this, "SMS sending enabled", Toast.LENGTH_SHORT).show();
+            }
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss());
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+    }
+
+    private void savePotholes() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        Set<String> potholes = new HashSet<>(potholeList);
+        editor.putStringSet(POTHOLE_KEY, potholes);
+        editor.apply();
+        Log.d(TAG, "Potholes saved: " + potholes);
+    }
+
+    private void loadSavedPotholes() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        Set<String> potholes = prefs.getStringSet(POTHOLE_KEY, new HashSet<>());
+
+        // Clear existing potholes from the list
+        potholeList.clear();
+
+        for (String pothole : potholes) {
+            potholeList.add(pothole);
+            String[] parts = pothole.split(": ");
+            String[] coords = parts[1].split(", ");
+            double lat = Double.parseDouble(coords[0]);
+            double lon = Double.parseDouble(coords[1]);
+            webView.evaluateJavascript("window.postMessage({type: 'location', lat: " + lat + ", lon: " + lon + "}, '*');", null);
+        }
+        Log.d(TAG, "Potholes loaded: " + potholes);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (model != null) {
+            model.close();
         }
     }
 }
