@@ -111,7 +111,10 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        // Check if location services are enabled
+        checkLocationServices();
+
+        if (ContextCompat.checkSelfPermission(  this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_LOCATION_PERMISSION);
         } else {
             startLocationUpdates();
@@ -186,10 +189,15 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             float threshold = 0.5f;
             String resultString = probabilities[0] > threshold ? "pothole" : "not a pothole";
 
+            // Ensure currentLocation is updated just before using it
             if ("pothole".equals(resultString) && currentLocation != null) {
                 double lat = currentLocation.getLatitude();
                 double lon = currentLocation.getLongitude();
-                webView.evaluateJavascript("window.postMessage({type: 'location', lat: " + lat + ", lon: " + lon + "}, '*');", null);
+                Log.d(TAG, "Using location for pothole: " + lat + ", " + lon); // Debug log
+
+                // Send location to the WebView
+                String jsCode = "window.postMessage({type: 'location', lat: " + lat + ", lon: " + lon + "}, '*');";
+                webView.evaluateJavascript(jsCode, null);
 
                 String pothole = "Pothole at: " + lat + ", " + lon;
                 if (!potholeList.contains(pothole)) {
@@ -224,8 +232,10 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         String message = "Pothole detected at coordinates:\nLatitude: " + lat + "\nLongitude: " + lon + "\n\n- Team idkWhatWe'reDoing";
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            Log.d(TAG, "SMS permission not granted. Requesting permission.");
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.SEND_SMS}, REQUEST_SEND_SMS);
         } else {
+            Log.d(TAG, "Sending SMS to: " + phoneNumber);
             SmsManager smsManager = SmsManager.getDefault();
             smsManager.sendTextMessage(phoneNumber, null, message, null, null);
             Toast.makeText(this, "SMS sent successfully!", Toast.LENGTH_SHORT).show();
@@ -252,13 +262,41 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     private void startLocationUpdates() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
+            // Use both GPS and Network providers for location updates
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 10, this);
+            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5000, 10, this);
+
+            // Fallback to last known location
+            Location lastKnownLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            if (lastKnownLocation != null) {
+                currentLocation = lastKnownLocation;
+                onLocationChanged(lastKnownLocation); // Handle the location
+            }
+        } else {
+            Log.d(TAG, "Location permission not granted. Unable to start location updates.");
+        }
+    }
+
+    private void checkLocationServices() {
+        boolean gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+        boolean networkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+
+        if (!gpsEnabled && !networkEnabled) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Enable Location")
+                    .setMessage("Your location settings are off. Please enable location to use this app.")
+                    .setPositiveButton("Location Settings", (dialog, which) -> {
+                        startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
         }
     }
 
     @Override
     public void onLocationChanged(@NonNull Location location) {
         currentLocation = location;
+        Log.d(TAG, "Location updated: " + location.getLatitude() + ", " + location.getLongitude());
         String jsCode = "window.postMessage({type: 'currentLocation', lat: " + location.getLatitude() + ", lon: " + location.getLongitude() + "}, '*');";
         webView.evaluateJavascript(jsCode, null);
     }
@@ -290,8 +328,11 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             }
         } else if (requestCode == REQUEST_SEND_SMS) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Permission granted, you can send SMS now
-                Toast.makeText(this, "SMS permission granted. Try again.", Toast.LENGTH_SHORT).show();
+                // Permission granted, retry sending SMS
+                Log.d(TAG, "SMS permission granted. Retrying SMS sending.");
+                if (currentLocation != null) {
+                    sendSms(currentLocation.getLatitude(), currentLocation.getLongitude());
+                }
             } else {
                 Toast.makeText(this, "SMS permission denied.", Toast.LENGTH_SHORT).show();
             }
