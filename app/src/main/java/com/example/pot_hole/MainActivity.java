@@ -183,7 +183,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             }
             Log.d(TAG, "Model output probabilities: [" + probabilities[0] + ", " + probabilities[1] + "]");
             if (toastMessagesEnabled) {
-                Toast.makeText(this, "Inference completed: Pothole prob: " + probabilities[0] + ", Not Pothole prob: " + probabilities[1], Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "Pothole prob: " + String.format("%.3f", probabilities[0]) + "\nNot Pothole prob: " + String.format("%.3f", probabilities[1]), Toast.LENGTH_LONG).show();
             }
 
             float threshold = 0.5f;
@@ -229,7 +229,9 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     private void sendSms(double lat, double lon) {
         String phoneNumber = "9902956437"; // Replace with the actual phone number
-        String message = "Pothole detected at coordinates:\nLatitude: " + lat + "\nLongitude: " + lon + "\n\n- Team idkWhatWe'reDoing";
+        String googleMapsUrl = "https://www.google.com/maps?q=" + lat + "," + lon;
+        String message = "Pothole detected at:\n" + googleMapsUrl + "\n\n- Team idkWhatWe'reDoing";
+
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
             Log.d(TAG, "SMS permission not granted. Requesting permission.");
